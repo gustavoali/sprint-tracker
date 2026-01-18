@@ -1,0 +1,29 @@
+{
+  "name": "sprint-tracker",
+  "version": "1.0.0",
+  "description": "Lightweight CLI-based sprint and task tracking system",
+  "main": "src/cli.js",
+  "bin": {
+    "sprint": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "init": "node src/cli.js init",
+    "board": "node src/cli.js board",
+    "status": "node src/cli.js status"
+  },
+  "keywords": [
+    "sprint",
+    "kanban",
+    "task-management",
+    "cli",
+    "agile",
+    "scrum"
+  ],
+  "author": "gustavoali",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gustavoali/sprint-tracker.git"
+  }
+}
