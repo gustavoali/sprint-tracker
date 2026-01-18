@@ -8,6 +8,15 @@
 const fs = require('fs');
 const path = require('path');
 
+// GitHub sync module (lazy loaded)
+let githubSync = null;
+function getGitHubSync() {
+  if (!githubSync) {
+    githubSync = require('./github-sync');
+  }
+  return githubSync;
+}
+
 // Configuration
 const CONFIG_FILE = '.sprint-tracker.json';
 const DEFAULT_DATA_FILE = 'sprint-data.json';
@@ -492,6 +501,11 @@ ${c.bright}MANAGE${c.reset}
   sprint edit <id> <field> <val>  Edit task field
   sprint generate                 Generate SPRINT_BOARD.md
 
+${c.bright}GITHUB SYNC${c.reset}
+  sprint push [--all]             Create/update GitHub issues from tasks
+  sprint pull                     Update task status from GitHub issues
+  sprint link <id> <issue#>       Link task to existing issue
+
 ${c.bright}STATUSES${c.reset}
   backlog, ready, in_progress, review, done
 
@@ -570,6 +584,70 @@ switch (command) {
   case 'generate':
     cmdGenerate(data, config);
     break;
+
+  // GitHub sync commands
+  case 'push': {
+    const gh = getGitHubSync();
+    if (!gh.checkGhCli()) {
+      console.error(`${c.red}GitHub CLI (gh) not found. Install from https://cli.github.com${c.reset}`);
+      process.exit(1);
+    }
+    const pushOptions = {
+      sprintOnly: !args.includes('--all')
+    };
+    const results = gh.syncToGitHub(data, config, pushOptions);
+    saveData(config, data); // Save updated issue numbers
+    console.log(`\n${c.green}✓ Created: ${results.created.length} issues${c.reset}`);
+    console.log(`${c.yellow}✓ Updated: ${results.updated.length} issues${c.reset}`);
+    if (results.errors.length > 0) {
+      console.log(`${c.red}✗ Errors: ${results.errors.length}${c.reset}`);
+    }
+    break;
+  }
+
+  case 'pull': {
+    const gh = getGitHubSync();
+    if (!gh.checkGhCli()) {
+      console.error(`${c.red}GitHub CLI (gh) not found. Install from https://cli.github.com${c.reset}`);
+      process.exit(1);
+    }
+    const pullResults = gh.pullFromGitHub(data, config);
+    saveData(config, data);
+    console.log(`\n${c.green}✓ Updated: ${pullResults.updated.length} tasks${c.reset}`);
+    if (pullResults.errors.length > 0) {
+      console.log(`${c.red}✗ Errors: ${pullResults.errors.length}${c.reset}`);
+    }
+    break;
+  }
+
+  case 'link': {
+    const taskId = args[1];
+    const issueNum = parseInt(args[2]);
+    if (!taskId || !issueNum) {
+      console.error(`${c.red}Usage: sprint link <task-id> <issue-number>${c.reset}`);
+      process.exit(1);
+    }
+    const task = data.tasks.find(t => t.id.toLowerCase() === taskId.toLowerCase());
+    if (!task) {
+      console.error(`${c.red}Task not found: ${taskId}${c.reset}`);
+      process.exit(1);
+    }
+    const gh = getGitHubSync();
+    const repoInfo = gh.getRepoInfo();
+    if (repoInfo) {
+      task.githubIssue = issueNum;
+      task.githubUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/issues/${issueNum}`;
+      saveData(config, data);
+      console.log(`${c.green}✓ Linked ${task.id} → Issue #${issueNum}${c.reset}`);
+      console.log(`  ${c.dim}${task.githubUrl}${c.reset}`);
+    } else {
+      task.githubIssue = issueNum;
+      saveData(config, data);
+      console.log(`${c.green}✓ Linked ${task.id} → Issue #${issueNum}${c.reset}`);
+    }
+    break;
+  }
+
   default:
     console.error(`${c.red}Unknown command: ${command}${c.reset}`);
     cmdHelp();
