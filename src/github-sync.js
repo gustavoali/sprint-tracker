@@ -72,10 +72,18 @@ function createIssue(task, repoInfo, labels = []) {
   const allLabels = [...labels];
   if (task.priority === 'critical') allLabels.push('priority:critical');
   else if (task.priority === 'high') allLabels.push('priority:high');
-
   if (task.type) allLabels.push(`type:${task.type}`);
 
-  // Create issue using gh CLI
+  // Ensure labels exist
+  allLabels.forEach(label => {
+    try {
+      spawnSync('gh', ['label', 'create', label, '--repo', `${owner}/${repo}`], { stdio: 'pipe' });
+    } catch {
+      // Label might already exist
+    }
+  });
+
+  // Create issue using spawnSync (handles multiline body correctly)
   const args = [
     'issue', 'create',
     '--repo', `${owner}/${repo}`,
@@ -84,24 +92,24 @@ function createIssue(task, repoInfo, labels = []) {
   ];
 
   if (allLabels.length > 0) {
-    // First ensure labels exist
-    allLabels.forEach(label => {
-      try {
-        execSync(`gh label create "${label}" --repo ${owner}/${repo} 2>/dev/null`, { stdio: 'pipe' });
-      } catch {
-        // Label might already exist
-      }
-    });
     args.push('--label', allLabels.join(','));
   }
 
   try {
-    const result = execSync(`gh ${args.map(a => `"${a}"`).join(' ')}`, {
-      stdio: 'pipe',
+    const result = spawnSync('gh', args, {
       encoding: 'utf8',
-      shell: true
+      stdio: ['pipe', 'pipe', 'pipe']
     });
-    const issueUrl = result.trim();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (result.status !== 0) {
+      throw new Error(result.stderr || 'Unknown error');
+    }
+
+    const issueUrl = result.stdout.trim();
     const issueNumber = issueUrl.match(/\/issues\/(\d+)/)?.[1];
     return { url: issueUrl, number: parseInt(issueNumber) };
   } catch (err) {
